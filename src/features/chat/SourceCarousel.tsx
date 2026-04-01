@@ -1,18 +1,14 @@
 import { useState } from "react";
 import type { Citation } from "./types";
+import { getDomainLabel } from "../../utils/urlHelpers";
 
 type SourceCarouselProps = {
   citations: Citation[];
 };
 
-function getDomain(uri?: string): string {
-  try { return new URL(uri ?? "").hostname.replace(/^www\./, ""); }
-  catch { return ""; }
-}
-
 /** Placeholder visual for cards without an image — shows the domain's first letter */
 function DomainPlaceholder({ citation }: { citation: Citation }) {
-  const domain = getDomain(citation.uri) || citation.label;
+  const domain = getDomainLabel(citation.uri, citation.label);
   const letter = domain[0]?.toUpperCase() ?? "?";
   return (
     <div className="source-card-image source-card-image--placeholder source-card-placeholder-icon">
@@ -50,7 +46,7 @@ export function SourceCarousel({ citations }: SourceCarouselProps) {
         >
           {c.image ? <ImageWithFallback citation={c} /> : <DomainPlaceholder citation={c} />}
           <div className="source-card-body">
-            <span className="source-card-domain">{getDomain(c.uri) || c.label}</span>
+            <span className="source-card-domain">{getDomainLabel(c.uri, c.label)}</span>
             <span className="source-card-title">{c.source}</span>
           </div>
         </a>

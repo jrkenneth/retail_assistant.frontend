@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { ActionRenderer } from "./ActionRenderer";
 import { MessageBubble } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
 import type { ChatMessage } from "./types";
@@ -10,6 +9,8 @@ type MessageListProps = {
   statusMessage?: string;
   onTryAgain: (messageId: string) => void;
   onNavigate: (messageId: string, index: number) => void;
+  onOpenAccessRequest: (suggestedResource?: string) => void;
+  onViewAccessRequests: () => void;
 };
 
 export function MessageList({
@@ -18,6 +19,8 @@ export function MessageList({
   statusMessage,
   onTryAgain,
   onNavigate,
+  onOpenAccessRequest,
+  onViewAccessRequests,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -31,19 +34,25 @@ export function MessageList({
         <div className="empty-state">Start by entering a prompt in the composer below.</div>
       ) : null}
 
-      {messages.map((message) => (
-        <div key={message.id} className="message-row">
-          <MessageBubble
-            message={message}
-            onTryAgain={() => onTryAgain(message.id)}
-            onNavigate={(index) => onNavigate(message.id, index)}
-          />
-          {/* UI action buttons rendered outside the bubble */}
-          {message.uiActions?.length ? (
-            <ActionRenderer actions={message.uiActions} />
-          ) : null}
-        </div>
-      ))}
+      {messages.map((message, index) => {
+        const requestContext = [...messages]
+          .slice(0, index)
+          .reverse()
+          .find((candidate) => candidate.role === "user")?.text;
+
+        return (
+          <div key={message.id} className="message-row">
+            <MessageBubble
+              message={message}
+              onTryAgain={() => onTryAgain(message.id)}
+              onNavigate={(messageIndex) => onNavigate(message.id, messageIndex)}
+              onOpenAccessRequest={onOpenAccessRequest}
+              onViewAccessRequests={onViewAccessRequests}
+              requestContext={requestContext}
+            />
+          </div>
+        );
+      })}
 
       {isTyping ? <TypingIndicator message={statusMessage} /> : null}
       <div ref={bottomRef} />

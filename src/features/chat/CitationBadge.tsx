@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Citation } from "./types";
 import { CitationPopover } from "./CitationPopover";
+import { getDomainLabel } from "../../utils/urlHelpers";
 
 type CitationBadgeProps = {
   citations: Citation[];
@@ -12,11 +13,7 @@ export function CitationBadge({ citations }: CitationBadgeProps) {
 
   const first = citations[0];
   const extra = citations.length - 1;
-
-  const domain = (() => {
-    try { return new URL(first.uri ?? "").hostname.replace(/^www\./, ""); }
-    catch { return first.label; }
-  })();
+  const domain = getDomainLabel(first.uri, first.label);
 
   // Single source — click opens URL directly
   if (citations.length === 1) {

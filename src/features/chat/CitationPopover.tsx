@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Citation } from "./types";
+import { getDomainLabel } from "../../utils/urlHelpers";
 
 type CitationPopoverProps = {
   citations: Citation[];
@@ -9,11 +10,7 @@ export function CitationPopover({ citations }: CitationPopoverProps) {
   const [index, setIndex] = useState(0);
   const current = citations[index];
   if (!current) return null;
-
-  const domain = (() => {
-    try { return new URL(current.uri ?? "").hostname.replace(/^www\./, ""); }
-    catch { return current.label; }
-  })();
+  const domain = getDomainLabel(current.uri, current.label);
 
   return (
     <div className="citation-popover">

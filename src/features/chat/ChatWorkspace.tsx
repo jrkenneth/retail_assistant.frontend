@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { API_BASE_URL } from "../../config";
+import { AccessRequestModal } from "../access-requests/AccessRequestModal";
+import { createAccessRequestApi } from "../access-requests/accessRequestsApi";
+import type { AuthenticatedUser } from "../auth/authApi";
 import { MessageList } from "./MessageList";
 import { PromptComposer } from "./PromptComposer";
 import { SessionList } from "./SessionList";
@@ -11,62 +14,93 @@ import {
   listSessionsApi,
   sendChatPromptStreamApi,
 } from "./chatApi";
-import type { ChatMessage, ChatSession, MessageAlternative } from "./types";
+import type { ChatMessage, ChatSession } from "./types";
+import { getStorageItem, removeStorageItem, setStorageItem } from "../../utils/storage";
+import { createAssistantMessageFields, createMessageAlternative } from "./messageTransforms";
 
 const mkId = () => Math.random().toString(36).slice(2, 10);
 
 const RESEARCH_MODE_KEY = (sessionId: string) => `research_mode_${sessionId}`;
+const THINKING_MODE_KEY = (sessionId: string) => `thinking_mode_${sessionId}`;
 const ACTIVE_SESSION_KEY = "active_session_id";
 
 function loadActiveSessionId(): string {
-  try { return localStorage.getItem(ACTIVE_SESSION_KEY) ?? ""; }
-  catch { return ""; }
+  return getStorageItem(ACTIVE_SESSION_KEY) ?? "";
 }
 
 function saveActiveSessionId(id: string): void {
-  try { localStorage.setItem(ACTIVE_SESSION_KEY, id); }
-  catch { /* ignore */ }
+  setStorageItem(ACTIVE_SESSION_KEY, id);
 }
 
 function loadResearchMode(sessionId: string): boolean {
-  try {
-    return localStorage.getItem(RESEARCH_MODE_KEY(sessionId)) === "true";
-  } catch {
-    return false;
-  }
+  return getStorageItem(RESEARCH_MODE_KEY(sessionId)) === "true";
 }
 
 function saveResearchMode(sessionId: string, value: boolean): void {
-  try {
-    localStorage.setItem(RESEARCH_MODE_KEY(sessionId), String(value));
-  } catch {
-    // Ignore storage errors (private browsing, quota, etc.)
-  }
+  setStorageItem(RESEARCH_MODE_KEY(sessionId), String(value));
 }
 
 function clearResearchMode(sessionId: string): void {
-  try {
-    localStorage.removeItem(RESEARCH_MODE_KEY(sessionId));
-  } catch {
-    // Ignore.
-  }
+  removeStorageItem(RESEARCH_MODE_KEY(sessionId));
+}
+
+function loadThinkingMode(sessionId: string): boolean {
+  const value = getStorageItem(THINKING_MODE_KEY(sessionId));
+  return value === null ? true : value === "true";
+}
+
+function saveThinkingMode(sessionId: string, value: boolean): void {
+  setStorageItem(THINKING_MODE_KEY(sessionId), String(value));
+}
+
+function clearThinkingMode(sessionId: string): void {
+  removeStorageItem(THINKING_MODE_KEY(sessionId));
 }
 
 type HealthStatus = "loading" | "ok" | "error";
 
-export function ChatWorkspace() {
+type ChatWorkspaceProps = {
+  user: AuthenticatedUser;
+  onLogout: () => Promise<void>;
+};
+
+export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [backendStatus, setBackendStatus] = useState<HealthStatus>("loading");
   const [researchMode, setResearchMode] = useState(false);
+  const [thinkingMode, setThinkingMode] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isAccessRequestModalOpen, setIsAccessRequestModalOpen] = useState(false);
+  const [suggestedAccessResource, setSuggestedAccessResource] = useState("");
+  const [accessRequestNotice, setAccessRequestNotice] = useState("");
 
-  // Sync research mode from localStorage whenever the active session changes.
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 900px)");
+
+    const applyViewportMode = (matches: boolean) => {
+      setIsMobileViewport(matches);
+      setSidebarOpen(!matches);
+    };
+
+    applyViewportMode(mediaQuery.matches);
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      applyViewportMode(event.matches);
+    };
+
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  // Sync per-session modes from localStorage whenever the active session changes.
   useEffect(() => {
     if (activeSessionId) {
       setResearchMode(loadResearchMode(activeSessionId));
+      setThinkingMode(loadThinkingMode(activeSessionId));
       saveActiveSessionId(activeSessionId);
     }
   }, [activeSessionId]);
@@ -76,6 +110,13 @@ export function ChatWorkspace() {
     const next = !researchMode;
     setResearchMode(next);
     saveResearchMode(activeSessionId, next);
+  };
+
+  const toggleThinking = () => {
+    if (!activeSessionId) return;
+    const next = !thinkingMode;
+    setThinkingMode(next);
+    saveThinkingMode(activeSessionId, next);
   };
 
   useEffect(() => {
@@ -165,6 +206,7 @@ export function ChatWorkspace() {
       // Continue with local removal even if backend call fails.
     }
     clearResearchMode(sessionId);
+    clearThinkingMode(sessionId);
     setSessions((prev) => {
       const remaining = prev.filter((s) => s.id !== sessionId);
       if (activeSessionId === sessionId) {
@@ -191,6 +233,9 @@ export function ChatWorkspace() {
       const created = await createSessionApi(id, `New Chat ${sessions.length + 1}`);
       setSessions((prev) => [created, ...prev]);
       setActiveSessionId(created.id);
+      if (isMobileViewport) {
+        setSidebarOpen(false);
+      }
     } catch {
       const localSession: ChatSession = {
         id,
@@ -201,6 +246,16 @@ export function ChatWorkspace() {
       };
       setSessions((prev) => [localSession, ...prev]);
       setActiveSessionId(localSession.id);
+      if (isMobileViewport) {
+        setSidebarOpen(false);
+      }
+    }
+  };
+
+  const selectSession = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    if (isMobileViewport) {
+      setSidebarOpen(false);
     }
   };
 
@@ -215,12 +270,26 @@ export function ChatWorkspace() {
     }));
   };
 
+  const openAccessRequestModal = (suggestedResource?: string) => {
+    setSuggestedAccessResource(suggestedResource ?? "");
+    setIsAccessRequestModalOpen(true);
+  };
+
+  const viewAccessRequests = () => {
+    window.location.href = "/access-requests";
+  };
+
+  const submitAccessRequest = async (resourceRequested: string, justification: string) => {
+    const created = await createAccessRequestApi(resourceRequested, justification);
+    setAccessRequestNotice(`Access request ${created.reference_number} submitted for review.`);
+  };
+
   const MAX_RETRIES = 3;
 
   const tryAgain = async (messageId: string) => {
     if (!activeSession) return;
 
-    // Snapshot session ID immediately — avoids stale closure if active session changes mid-flight
+    // Snapshot session ID immediately so we do not capture a stale active session mid-flight.
     const sessionId = activeSession.id;
 
     // Find the user message immediately before the target assistant message
@@ -231,7 +300,7 @@ export function ChatWorkspace() {
     const userMsg = msgs[targetIndex - 1];
     if (!userMsg || userMsg.role !== "user") return;
 
-    // Enforce retry cap: alternatives starts at 1 (original), so retry count = length - 1
+    // alternatives starts at 1 (the original answer), so retry count is length - 1.
     const currentRetries = (targetMsg.alternatives?.length ?? 1) - 1;
     if (currentRetries >= MAX_RETRIES) return;
 
@@ -250,9 +319,9 @@ export function ChatWorkspace() {
       const response = await sendChatPromptStreamApi(
         sessionId,
         prompt,
-        { research: researchMode },
+        { research: researchMode, thinking: thinkingMode },
         (delta) => {
-          // Stream each token live into streamingText
+          // Stream each token live into streamingText.
           updateActiveSession((session) => ({
             ...session,
             messages: session.messages.map((msg) =>
@@ -266,14 +335,7 @@ export function ChatWorkspace() {
         true, // is_retry — skip user-turn persistence, strip prior answer from history
       );
 
-      const newAlt: MessageAlternative = {
-        text: response.message_text,
-        uiActions: response.ui_actions,
-        citations: response.citations,
-        summary: response.summary,
-        follow_up: response.follow_up,
-        showSources: response.showSources,
-      };
+      const newAlt = createMessageAlternative(response);
 
       // Commit the final response as a new alternative and clear streaming state
       updateActiveSession((session) => ({
@@ -290,7 +352,7 @@ export function ChatWorkspace() {
         ),
       }));
     } catch {
-      // Retry failed — restore previous display by clearing streamingText
+      // Retry failed, so restore the previous display by clearing streamingText.
       updateActiveSession((session) => ({
         ...session,
         messages: session.messages.map((msg) =>
@@ -315,12 +377,6 @@ export function ChatWorkspace() {
       timestamp: new Date().toISOString(),
     };
 
-    updateActiveSession((session) => ({
-      ...session,
-      updatedAt: userMessage.timestamp,
-      messages: [...session.messages, userMessage],
-    }));
-
     const assistantId = `msg-${mkId()}`;
     const assistantPlaceholder: ChatMessage = {
       id: assistantId,
@@ -331,7 +387,8 @@ export function ChatWorkspace() {
 
     updateActiveSession((session) => ({
       ...session,
-      messages: [...session.messages, assistantPlaceholder],
+      updatedAt: userMessage.timestamp,
+      messages: [...session.messages, userMessage, assistantPlaceholder],
     }));
 
     setIsTyping(true);
@@ -339,55 +396,51 @@ export function ChatWorkspace() {
       const response = await sendChatPromptStreamApi(
         activeSession.id,
         prompt,
-        { research: researchMode },
+        { research: researchMode, thinking: thinkingMode },
         (delta) => {
-        updateActiveSession((session) => ({
-          ...session,
-          messages: session.messages.map((message) =>
-            message.id === assistantId
-              ? {
-                  ...message,
-                  text: `${message.text}${delta}`,
-                }
-              : message,
-          ),
-        }));
+          updateActiveSession((session) => ({
+            ...session,
+            messages: session.messages.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    text: `${message.text}${delta}`,
+                  }
+                : message,
+            ),
+          }));
         },
         (_phase, message) => {
           setStatusMessage(message);
         },
       );
 
-      const firstAlt: MessageAlternative = {
-        text: response.message_text,
-        uiActions: response.ui_actions,
-        citations: response.citations,
-        summary: response.summary,
-        follow_up: response.follow_up,
-        showSources: response.showSources,
-      };
+      const assistantFields = createAssistantMessageFields(response);
+      const firstAlt = createMessageAlternative(response);
 
-      updateActiveSession((session) => ({
-        ...session,
-        updatedAt: new Date().toISOString(),
-        messages: session.messages.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                text: response.message_text,
-                uiActions: response.ui_actions,
-                citations: response.citations,
-                summary: response.summary,
-                follow_up: response.follow_up,
-                showSources: response.showSources,
-                toolTrace: response.tool_trace,
-                errors: response.errors,
-                alternatives: [firstAlt],
-                currentAlternativeIndex: 0,
-              }
-            : message,
-        ),
-      }));
+      setSessions((prev) =>
+        prev.map((session) => {
+          if (session.id !== activeSession.id) return session;
+          const updatedName = response.session_title ?? session.name;
+          return {
+            ...session,
+            name: updatedName,
+            updatedAt: new Date().toISOString(),
+            messages: session.messages.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    ...assistantFields,
+                    toolTrace: response.tool_trace,
+                    errors: response.errors,
+                    alternatives: [firstAlt],
+                    currentAlternativeIndex: 0,
+                  }
+                : message,
+            ),
+          };
+        }),
+      );
     } catch {
       updateActiveSession((session) => ({
         ...session,
@@ -407,7 +460,6 @@ export function ChatWorkspace() {
       setStatusMessage("");
     }
   };
-//Rogers Copilot
   return (
     <main className="chat-app">
       <header className="app-header">
@@ -421,24 +473,62 @@ export function ChatWorkspace() {
           >
             ☰
           </button>
-          <h1>Chat Workspace</h1>
+          <div className="app-header-copy">
+            <h1>Chat Workspace</h1>
+            <p>
+              {user.full_name} · {user.role} · {user.department}
+            </p>
+          </div>
         </div>
-        <div className="status-pill" data-status={backendStatus}>
-          API: {backendStatus}
+        <div className="app-header-actions">
+          <div className="status-pill" data-status={backendStatus}>
+            API: {backendStatus}
+          </div>
+          {/*
+          <a className="secondary-link app-header-link" href="/access-requests">
+            Access requests
+          </a>
+          */}
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => { void onLogout(); }}
+          >
+            Log out
+          </button>
         </div>
       </header>
 
-      <section className={`chat-layout${sidebarOpen ? "" : " chat-layout--sidebar-closed"}`}>
+      {isMobileViewport ? (
+        <button
+          type="button"
+          className={`mobile-sidebar-backdrop${sidebarOpen ? " mobile-sidebar-backdrop--open" : ""}`}
+          aria-label="Close sidebar"
+          onClick={() => setSidebarOpen(false)}
+        />
+      ) : null}
+
+      <section
+        className={[
+          "chat-layout",
+          sidebarOpen ? "" : "chat-layout--sidebar-closed",
+          isMobileViewport ? "chat-layout--mobile" : "",
+          isMobileViewport && sidebarOpen ? "chat-layout--mobile-sidebar-open" : "",
+        ].filter(Boolean).join(" ")}
+      >
         <SessionList
           sessions={sessions}
           activeSessionId={activeSessionId}
           onCreateSession={() => { void createSession(); }}
-          onSelectSession={setActiveSessionId}
+          onSelectSession={selectSession}
           onDeleteSession={(id) => { void deleteSession(id); }}
           onRenameSession={(id, name) => { void renameSession(id, name); }}
         />
 
         <div className="chat-main">
+          {accessRequestNotice ? (
+            <div className="chat-notice toast toast-success">{accessRequestNotice}</div>
+          ) : null}
           {activeSession ? (
             <>
               <MessageList
@@ -447,12 +537,16 @@ export function ChatWorkspace() {
                 statusMessage={statusMessage}
                 onTryAgain={(id) => { void tryAgain(id); }}
                 onNavigate={navigateAlternative}
+                onOpenAccessRequest={openAccessRequestModal}
+                onViewAccessRequests={viewAccessRequests}
               />
               <PromptComposer
                 onSend={sendPrompt}
                 disabled={isTyping}
                 researchMode={researchMode}
+                thinkingMode={thinkingMode}
                 onToggleResearch={toggleResearch}
+                onToggleThinking={toggleThinking}
               />
             </>
           ) : (
@@ -462,6 +556,12 @@ export function ChatWorkspace() {
           )}
         </div>
       </section>
+      <AccessRequestModal
+        isOpen={isAccessRequestModalOpen}
+        suggestedResource={suggestedAccessResource}
+        onClose={() => setIsAccessRequestModalOpen(false)}
+        onSubmit={submitAccessRequest}
+      />
     </main>
   );
 }

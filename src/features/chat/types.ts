@@ -49,6 +49,8 @@ export type ChatResponse = {
   summary?: string;
   follow_up?: string;
   showSources?: boolean;
+  // Returned on the first message only — client should rename the session.
+  session_title?: string;
 };
 
 export type MessageAlternative = {

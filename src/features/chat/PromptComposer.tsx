@@ -5,11 +5,20 @@ import { SendButton } from "./SendButton";
 type PromptComposerProps = {
   disabled?: boolean;
   researchMode: boolean;
+  thinkingMode: boolean;
   onToggleResearch: () => void;
+  onToggleThinking: () => void;
   onSend: (prompt: string) => void;
 };
 
-export function PromptComposer({ disabled, researchMode, onToggleResearch, onSend }: PromptComposerProps) {
+export function PromptComposer({
+  disabled,
+  researchMode,
+  thinkingMode,
+  onToggleResearch,
+  onToggleThinking,
+  onSend,
+}: PromptComposerProps) {
   const [prompt, setPrompt] = useState("");
 
   const submit = () => {
@@ -34,6 +43,13 @@ export function PromptComposer({ disabled, researchMode, onToggleResearch, onSen
           onClick={onToggleResearch}
         >
           Research Mode
+        </button>
+        <button
+          type="button"
+          className={`mode-toggle-btn${thinkingMode ? " active" : ""}`}
+          onClick={onToggleThinking}
+        >
+          Thinking Mode
         </button>
       </div>
     </footer>

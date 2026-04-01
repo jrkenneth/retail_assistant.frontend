@@ -1,5 +1,7 @@
 import type { ChatMessage, ChatResponse, ChatSession, ToolTrace, UiAction } from "./types";
 import { API_BASE_URL } from "../../config";
+import { authorizedFetch } from "../auth/authApi";
+import { mergeAssistantAlternatives } from "./messageTransforms";
 
 type BackendUiAction = {
   id: string;
@@ -15,6 +17,23 @@ type BackendUiAction = {
   description?: string;
   buttonLabel?: string;
   href?: string;
+};
+
+type BackendArtifact = {
+  id: string;
+  session_id: string;
+  title: string;
+  prompt: string;
+  artifact_type: "pdf" | "pptx" | "docx" | "xlsx" | "txt";
+  status: string;
+  file_name: string | null;
+  mime_type: string | null;
+  has_preview: boolean;
+  preview_url: string | null;
+  download_url: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 };
 
 type BackendCitation = {
@@ -47,6 +66,7 @@ type BackendChatResponse = {
   summary?: string;
   follow_up?: string;
   show_sources?: boolean;
+  session_title?: string;
 };
 
 type BackendSession = {
@@ -79,27 +99,6 @@ type BackendSessionMessagesResponse = {
   session: BackendSession;
   messages: BackendSessionMessage[];
   traces: BackendTraceRow[];
-};
-
-type BackendPresentation = {
-  id: string;
-  session_id: string;
-  title: string;
-  prompt: string;
-  status: string;
-  html_content: string;
-  metadata_json: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-};
-
-type BackendExportResponse = {
-  presentation_id: string;
-  format: "pdf" | "pptx";
-  file_name: string;
-  download_url: string;
-  mime_type: string;
-  note?: string;
 };
 
 const apiBase = API_BASE_URL;
@@ -145,6 +144,7 @@ function mapChatResponse(response: BackendChatResponse): ChatResponse {
     summary: response.summary,
     follow_up: response.follow_up,
     showSources: response.show_sources,
+    session_title: response.session_title,
   };
 }
 
@@ -172,7 +172,7 @@ function mapSessionMessages(payload: BackendSessionMessagesResponse): ChatMessag
     .reverse()
     .find((item) => item.role === "assistant")?.idx;
 
-  // First pass — map each DB row to a ChatMessage
+  // First pass - map each DB row to a ChatMessage.
   const flat: ChatMessage[] = payload.messages.map((message, idx) => {
     const rawActions = message.payload_json.ui_actions as BackendUiAction[] | undefined;
     const rawCitations = (message.payload_json.citations as BackendCitation[] | undefined) ?? [];
@@ -199,48 +199,11 @@ function mapSessionMessages(payload: BackendSessionMessagesResponse): ChatMessag
     };
   });
 
-  // Second pass — fold consecutive assistant messages (retries) into
-  // the preceding assistant message's alternatives array so the UI
-  // renders them as a single bubble with arrow navigation.
-  const merged: ChatMessage[] = [];
-  for (const msg of flat) {
-    const prev = merged[merged.length - 1];
-    if (msg.role === "assistant" && prev?.role === "assistant") {
-      // Build the alternatives list if not already started
-      const existingAlts = prev.alternatives ?? [
-        { text: prev.text, uiActions: prev.uiActions, citations: prev.citations,
-          summary: prev.summary, follow_up: prev.follow_up, showSources: prev.showSources },
-      ];
-      const newAlt = {
-        text: msg.text, uiActions: msg.uiActions, citations: msg.citations,
-        summary: msg.summary, follow_up: msg.follow_up, showSources: msg.showSources,
-      };
-      merged[merged.length - 1] = {
-        ...prev,
-        alternatives: [...existingAlts, newAlt],
-        currentAlternativeIndex: existingAlts.length, // show the newest
-      };
-    } else {
-      if (msg.role === "assistant") {
-        // Wrap in alternatives structure so the action bar renders correctly
-        merged.push({
-          ...msg,
-          alternatives: [{
-            text: msg.text, uiActions: msg.uiActions, citations: msg.citations,
-            summary: msg.summary, follow_up: msg.follow_up, showSources: msg.showSources,
-          }],
-          currentAlternativeIndex: 0,
-        });
-      } else {
-        merged.push(msg);
-      }
-    }
-  }
-  return merged;
+  return mergeAssistantAlternatives(flat);
 }
 
 export async function listSessionsApi(): Promise<ChatSession[]> {
-  const response = await fetch(`${apiBase}/sessions`);
+  const response = await authorizedFetch(`${apiBase}/sessions`);
   if (!response.ok) {
     throw new Error("Failed to list sessions");
   }
@@ -249,7 +212,7 @@ export async function listSessionsApi(): Promise<ChatSession[]> {
 }
 
 export async function createSessionApi(sessionId: string, title: string): Promise<ChatSession> {
-  const response = await fetch(`${apiBase}/sessions`, {
+  const response = await authorizedFetch(`${apiBase}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id: sessionId, title }),
@@ -262,7 +225,7 @@ export async function createSessionApi(sessionId: string, title: string): Promis
 }
 
 export async function fetchSessionMessagesApi(sessionId: string): Promise<ChatMessage[]> {
-  const response = await fetch(`${apiBase}/sessions/${sessionId}/messages`);
+  const response = await authorizedFetch(`${apiBase}/sessions/${sessionId}/messages`);
   if (!response.ok) {
     throw new Error("Failed to load messages");
   }
@@ -271,7 +234,7 @@ export async function fetchSessionMessagesApi(sessionId: string): Promise<ChatMe
 }
 
 export async function deleteSessionApi(sessionId: string): Promise<void> {
-  const response = await fetch(`${apiBase}/sessions/${sessionId}`, {
+  const response = await authorizedFetch(`${apiBase}/sessions/${sessionId}`, {
     method: "DELETE",
   });
   if (!response.ok) {
@@ -280,7 +243,7 @@ export async function deleteSessionApi(sessionId: string): Promise<void> {
 }
 
 export async function renameSessionApi(sessionId: string, title: string): Promise<void> {
-  const response = await fetch(`${apiBase}/sessions/${sessionId}`, {
+  const response = await authorizedFetch(`${apiBase}/sessions/${sessionId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
@@ -293,9 +256,9 @@ export async function renameSessionApi(sessionId: string, title: string): Promis
 export async function sendChatPromptApi(
   sessionId: string,
   prompt: string,
-  modes: { research: boolean } = { research: false },
+  modes: { research: boolean; thinking: boolean } = { research: false, thinking: true },
 ): Promise<ChatResponse> {
-  const response = await fetch(`${apiBase}/chat`, {
+  const response = await authorizedFetch(`${apiBase}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -320,12 +283,12 @@ type StreamEvent =
 export async function sendChatPromptStreamApi(
   sessionId: string,
   prompt: string,
-  modes: { research: boolean },
+  modes: { research: boolean; thinking: boolean },
   onDelta: (delta: string) => void,
   onStatus?: (phase: string, message: string) => void,
   isRetry = false,
 ): Promise<ChatResponse> {
-  const response = await fetch(`${apiBase}/chat/stream`, {
+  const response = await authorizedFetch(`${apiBase}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -389,28 +352,37 @@ export async function sendChatPromptStreamApi(
   return sendChatPromptApi(sessionId, prompt, modes);
 }
 
-export async function fetchPresentationApi(
-  presentationId: string,
-): Promise<BackendPresentation> {
-  const response = await fetch(`${apiBase}/presentations/${presentationId}`);
+export async function fetchArtifactApi(
+  artifactId: string,
+): Promise<BackendArtifact> {
+  const response = await authorizedFetch(`${apiBase}/artifacts/${artifactId}`);
   if (!response.ok) {
-    throw new Error("Failed to load presentation");
+    throw new Error("Failed to load artifact");
   }
-  return (await response.json()) as BackendPresentation;
+  return (await response.json()) as BackendArtifact;
 }
 
-export async function exportPresentationApi(
-  presentationId: string,
-  format: "pdf" | "pptx",
-): Promise<BackendExportResponse> {
-  const response = await fetch(`${apiBase}/presentations/${presentationId}/export`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ format }),
-  });
+export async function fetchArtifactPreviewApi(previewUrl: string): Promise<string> {
+  const response = await authorizedFetch(`${apiBase}${previewUrl}`);
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(typeof payload.error === "string" ? payload.error : "Failed to export presentation");
+    throw new Error("Failed to load artifact preview");
   }
-  return (await response.json()) as BackendExportResponse;
+  return response.text();
+}
+
+export async function downloadArtifactApi(downloadUrl: string, fileName: string): Promise<void> {
+  const response = await authorizedFetch(`${apiBase}${downloadUrl}`);
+  if (!response.ok) {
+    throw new Error("Failed to download artifact");
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

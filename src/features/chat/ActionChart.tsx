@@ -13,6 +13,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import type { ReactNode } from "react";
 import type { ChartSeries } from "./types";
 
 type ActionChartProps = {
@@ -33,6 +34,10 @@ const COLOURS = [
   "#4ade80",
 ];
 
+const CHART_HEIGHT = 280;
+const CHART_MARGIN = { top: 8, right: 16, left: 0, bottom: 4 };
+const AXIS_TICK = { fontSize: 12 };
+
 /**
  * Merge multi-series data into the flat object array that recharts expects:
  *   [{ label: "Q1", Revenue: 120, Cost: 80 }, ...]
@@ -52,18 +57,26 @@ function mergeSeriesData(series: ChartSeries[]): Record<string, string | number>
 
 export function ActionChart({ title, chartType, series }: ActionChartProps) {
   const isEmpty = !series || series.length === 0;
+  const pointCount = Math.max(0, ...series.map((s) => s.data.length));
+  const minChartWidth = chartType === "pie" ? 420 : Math.max(560, pointCount * 84);
 
   return (
     <article className="action-card">
       <h4>{title}</h4>
       {isEmpty ? (
         <p className="chart-empty">No data provided.</p>
-      ) : chartType === "pie" ? (
-        <PieChartView series={series} />
-      ) : chartType === "line" ? (
-        <LineChartView series={series} />
       ) : (
-        <BarChartView series={series} />
+        <div className="chart-scroll-wrap">
+          <div className="chart-canvas" style={{ minWidth: `${minChartWidth}px` }}>
+            {chartType === "pie" ? (
+              <PieChartView series={series} />
+            ) : chartType === "line" ? (
+              <LineChartView series={series} />
+            ) : (
+              <BarChartView series={series} />
+            )}
+          </div>
+        </div>
       )}
     </article>
   );
@@ -71,34 +84,46 @@ export function ActionChart({ title, chartType, series }: ActionChartProps) {
 
 /* ---------- sub-views ---------- */
 
+function ChartContainer({ children }: { children: ReactNode }) {
+  return (
+    <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+      {children}
+    </ResponsiveContainer>
+  );
+}
+
+function CartesianFrame({ showLegend }: { showLegend: boolean }) {
+  return (
+    <>
+      <CartesianGrid strokeDasharray="3 3" stroke="var(--border, #334)" />
+      <XAxis dataKey="label" tick={AXIS_TICK} />
+      <YAxis tick={AXIS_TICK} />
+      <Tooltip />
+      {showLegend ? <Legend /> : null}
+    </>
+  );
+}
+
 function BarChartView({ series }: { series: ChartSeries[] }) {
   const data = mergeSeriesData(series);
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border, #334)" />
-        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} />
-        <Tooltip />
-        {series.length > 1 && <Legend />}
+    <ChartContainer>
+      <BarChart data={data} margin={CHART_MARGIN}>
+        <CartesianFrame showLegend={series.length > 1} />
         {series.map((s, i) => (
           <Bar key={s.name} dataKey={s.name} fill={COLOURS[i % COLOURS.length]} radius={[3, 3, 0, 0]} />
         ))}
       </BarChart>
-    </ResponsiveContainer>
+    </ChartContainer>
   );
 }
 
 function LineChartView({ series }: { series: ChartSeries[] }) {
   const data = mergeSeriesData(series);
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border, #334)" />
-        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} />
-        <Tooltip />
-        {series.length > 1 && <Legend />}
+    <ChartContainer>
+      <LineChart data={data} margin={CHART_MARGIN}>
+        <CartesianFrame showLegend={series.length > 1} />
         {series.map((s, i) => (
           <Line
             key={s.name}
@@ -110,7 +135,7 @@ function LineChartView({ series }: { series: ChartSeries[] }) {
           />
         ))}
       </LineChart>
-    </ResponsiveContainer>
+    </ChartContainer>
   );
 }
 
@@ -118,7 +143,7 @@ function PieChartView({ series }: { series: ChartSeries[] }) {
   // Flatten all series data into one pie; use first series if multi
   const slices = series[0]?.data ?? [];
   return (
-    <ResponsiveContainer width="100%" height={280}>
+    <ChartContainer>
       <PieChart>
         <Pie
           data={slices}
@@ -137,6 +162,6 @@ function PieChartView({ series }: { series: ChartSeries[] }) {
         </Pie>
         <Tooltip />
       </PieChart>
-    </ResponsiveContainer>
+    </ChartContainer>
   );
 }

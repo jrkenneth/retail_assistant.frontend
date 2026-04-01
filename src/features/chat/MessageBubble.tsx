@@ -2,6 +2,8 @@ import { useState } from "react";
 import Markdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AccessDeniedCard } from "./AccessDeniedCard";
+import { ActionRenderer } from "./ActionRenderer";
 import { CitationBadge } from "./CitationBadge";
 import { MessageActionBar } from "./MessageActionBar";
 import { SourceCarousel } from "./SourceCarousel";
@@ -12,7 +14,20 @@ type MessageBubbleProps = {
   message: ChatMessage;
   onTryAgain: () => void;
   onNavigate: (index: number) => void;
+  onOpenAccessRequest: (suggestedResource?: string) => void;
+  onViewAccessRequests: () => void;
+  requestContext?: string;
 };
+
+function shouldRenderAccessDeniedCard(text: string): boolean {
+  const normalized = text.toLowerCase();
+  return (
+    normalized.includes("access request") ||
+    normalized.includes("access denied") ||
+    normalized.includes("do not have access") ||
+    normalized.includes("don't have access")
+  );
+}
 
 /** Replace [cite:N] markers with inline-code spans that react-markdown can intercept */
 function prepareCitationText(text: string): string {
@@ -50,7 +65,14 @@ function buildComponents(citations: Citation[]): Components {
   };
 }
 
-export function MessageBubble({ message, onTryAgain, onNavigate }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  onTryAgain,
+  onNavigate,
+  onOpenAccessRequest,
+  onViewAccessRequests,
+  requestContext,
+}: MessageBubbleProps) {
   const [sourcesPanelOpen, setSourcesPanelOpen] = useState(false);
 
   if (message.role === "user") {
@@ -73,6 +95,7 @@ export function MessageBubble({ message, onTryAgain, onNavigate }: MessageBubble
 
   const activeText        = isRetrying ? message.streamingText! : (alt?.text      ?? message.text);
   const activeCitations   = isRetrying ? [] : (alt?.citations ?? message.citations ?? []);
+  const activeUiActions   = isRetrying ? [] : (alt?.uiActions ?? message.uiActions ?? []);
   const activeSummary     = isRetrying ? undefined : (alt?.summary   ?? message.summary);
   const activeFollowUp    = isRetrying ? undefined : (alt?.follow_up ?? message.follow_up);
   const activeAltCount    = message.alternatives?.length ?? 1;
@@ -80,6 +103,7 @@ export function MessageBubble({ message, onTryAgain, onNavigate }: MessageBubble
   // show_sources: undefined/true → show; false → suppress carousel, badges and Sources button
   const showSources       = isRetrying ? false : ((alt?.showSources ?? message.showSources) !== false);
 
+  const showAccessDeniedCard = !isRetrying && shouldRenderAccessDeniedCard(activeText);
   const processedText  = showSources ? prepareCitationText(activeText) : activeText;
   const mdComponents   = buildComponents(activeCitations);
 
@@ -139,6 +163,19 @@ export function MessageBubble({ message, onTryAgain, onNavigate }: MessageBubble
           <p className="message-followup">{activeFollowUp}</p>
         </>
       )}
+
+      {/* UI action cards (download buttons, tables, charts, etc.) — alternative-aware */}
+      {activeUiActions.length > 0 && (
+        <ActionRenderer actions={activeUiActions} />
+      )}
+
+      {showAccessDeniedCard ? (
+        <AccessDeniedCard
+          suggestedResource={requestContext ?? activeText}
+          onOpenAccessRequest={onOpenAccessRequest}
+          onViewAccessRequests={onViewAccessRequests}
+        />
+      ) : null}
 
       {/* Action bar: copy, try-again, pagination, sources */}
       <MessageActionBar

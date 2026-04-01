@@ -1,15 +1,11 @@
 import type { Citation } from "./types";
+import { getDomainLabel } from "../../utils/urlHelpers";
 
 type SourcesPanelProps = {
   citations: Citation[];
   isOpen: boolean;
   onClose: () => void;
 };
-
-function getDomain(uri?: string): string {
-  try { return new URL(uri ?? "").hostname.replace(/^www\./, ""); }
-  catch { return ""; }
-}
 
 export function SourcesPanel({ citations, isOpen, onClose }: SourcesPanelProps) {
   if (citations.length === 0) return null;
@@ -32,7 +28,7 @@ export function SourcesPanel({ citations, isOpen, onClose }: SourcesPanelProps) 
 
         <ul className="sources-panel-list">
           {citations.map((c, i) => {
-            const domain = getDomain(c.uri) || c.label;
+            const domain = getDomainLabel(c.uri, c.label);
             return (
               <li key={i} className="sources-panel-item">
                 <a
