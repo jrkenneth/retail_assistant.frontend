@@ -128,7 +128,7 @@ export function MessageBubble({
   return (
     <article className="message assistant">
       <header className="message-meta">
-        <span>Copilot</span>
+        <span>Lena</span>
         <time>{new Date(message.timestamp).toLocaleTimeString()}</time>
       </header>
 

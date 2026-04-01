@@ -40,7 +40,7 @@ export function AccessRequestModal({
       await onSubmit(resourceRequested.trim(), justification.trim());
       onClose();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to create access request.");
+      setError(submitError instanceof Error ? submitError.message : "Unable to create escalation request.");
     } finally {
       setIsSubmitting(false);
     }
@@ -55,18 +55,18 @@ export function AccessRequestModal({
         aria-labelledby="access-request-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 id="access-request-title" className="rename-modal-title">Raise access request</h2>
+        <h2 id="access-request-title" className="rename-modal-title">Raise escalation request</h2>
         <p className="access-request-copy">
-          Confirm the resource you need and add a short justification. Your request will be submitted for review.
+          Confirm what needs manual review and add a short justification. Your request will be submitted for follow-up.
         </p>
         <form className="access-request-form" onSubmit={(event) => { void handleSubmit(event); }}>
           <label className="login-label">
-            Resource requested
+            Request summary
             <input
               className="rename-modal-input"
               value={resourceRequested}
               onChange={(event) => setResourceRequested(event.target.value)}
-              placeholder="Payroll details for Finance department"
+              placeholder="Delayed delivery investigation for order RT-99283"
               disabled={isSubmitting}
             />
           </label>

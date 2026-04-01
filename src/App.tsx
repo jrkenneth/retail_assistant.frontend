@@ -78,7 +78,7 @@ function App() {
         <section className="login-card">
           <div className="login-copy">
             <h1>Loading workspace</h1>
-            <p>Checking your session and preparing Copilot.</p>
+            <p>Checking your session and preparing Lena.</p>
           </div>
         </section>
       </main>

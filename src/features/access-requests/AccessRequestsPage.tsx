@@ -53,7 +53,7 @@ export function AccessRequestsPage({ user, onLogout }: AccessRequestsPageProps) 
         <div className="app-header-left">
           <div className="app-header-copy">
             <h1>Access Requests</h1>
-            <p>{user.full_name} · {user.role} · {user.department}</p>
+            <p>{user.full_name} · {user.customer_number} · {user.account_status}</p>
           </div>
         </div>
         <div className="app-header-actions">

@@ -12,9 +12,9 @@ export function AccessDeniedCard({
   return (
     <section className="access-denied-card">
       <div className="access-denied-badge">Access restricted</div>
-      <h4>You do not currently have permission to view this data.</h4>
+      <h4>This request could not be completed automatically.</h4>
       <p>
-        If you need this information to do your job, you can raise an access request for review or check the status of previous requests.
+        You can raise a support escalation for manual review or check the status of earlier escalation requests.
       </p>
       <div className="action-button-row">
         <button
@@ -22,7 +22,7 @@ export function AccessDeniedCard({
           className="primary-btn"
           onClick={() => onOpenAccessRequest(suggestedResource)}
         >
-          Raise access request
+          Raise escalation
         </button>
         <button
           type="button"

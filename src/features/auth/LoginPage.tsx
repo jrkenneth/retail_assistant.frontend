@@ -28,8 +28,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     <main className="login-page">
       <section className="login-card">
         <div className="login-copy">
-          <h1>Sign in with Aletia</h1>
-          <p>Use your Aletia HR credentials to open the Rogers Copilot workspace.</p>
+          <h1>Sign in to Velora</h1>
+          <p>Use your Velora customer credentials to continue with Lena.</p>
         </div>
 
         <form className="login-form" onSubmit={(event) => { void handleSubmit(event); }}>

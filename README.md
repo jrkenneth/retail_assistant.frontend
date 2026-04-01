@@ -1,6 +1,6 @@
 # Frontend
 
-React + Vite client for Rogers Copilot. This app is the authenticated operator-facing UI for chat, session management, access requests, artifact viewing, and model-mode controls.
+React + Vite client for Lena. This app is the authenticated UI for chat, session management, access requests, artifact viewing, and model-mode controls.
 
 ## What This App Does
 
@@ -226,4 +226,3 @@ All routes except login and health checks require a valid backend-issued JWT.
 6. Toggle research or thinking mode for the active session if needed.
 7. Raise and review access requests when RBAC blocks a query.
 8. Open generated artifacts through the viewer flow when returned by the backend.
-

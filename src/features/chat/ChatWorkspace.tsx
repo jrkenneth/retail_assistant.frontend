@@ -476,7 +476,7 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
           <div className="app-header-copy">
             <h1>Chat Workspace</h1>
             <p>
-              {user.full_name} · {user.role} · {user.department}
+              {user.full_name} · {user.customer_number} · {user.account_status}
             </p>
           </div>
         </div>
