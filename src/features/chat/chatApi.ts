@@ -1,4 +1,13 @@
-import type { ChatMessage, ChatResponse, ChatSession, ToolTrace, UiAction } from "./types";
+import type {
+  ChatMessage,
+  ChatResponse,
+  ChatSession,
+  PolicyCitation,
+  QuickAction,
+  ToolTrace,
+  TypedResponsePayload,
+  UiAction,
+} from "./types";
 import { API_BASE_URL } from "../../config";
 import { authorizedFetch } from "../auth/authApi";
 import { mergeAssistantAlternatives } from "./messageTransforms";
@@ -58,7 +67,13 @@ type BackendSkillTrace = {
 };
 
 type BackendChatResponse = {
+  response_type: "text" | "product_card" | "order_card" | "escalation" | "refusal" | "loyalty_card";
+  message: string;
   message_text: string;
+  confidence_score?: number;
+  payload?: TypedResponsePayload;
+  policy_citations?: PolicyCitation[];
+  quick_actions?: QuickAction[];
   ui_actions: BackendUiAction[];
   citations: BackendCitation[];
   tool_trace: BackendSkillTrace[];
@@ -122,7 +137,13 @@ function toUiAction(action: BackendUiAction): UiAction {
 
 function mapChatResponse(response: BackendChatResponse): ChatResponse {
   return {
+    response_type: response.response_type,
+    message: response.message,
     message_text: response.message_text,
+    confidence_score: response.confidence_score,
+    payload: response.payload,
+    policy_citations: response.policy_citations,
+    quick_actions: response.quick_actions,
     ui_actions: response.ui_actions.map(toUiAction),
     citations: response.citations.map((item) => ({
       label: item.label,
@@ -183,6 +204,24 @@ function mapSessionMessages(payload: BackendSessionMessagesResponse): ChatMessag
       id: message.id,
       role: message.role,
       text: message.message_text,
+      responseType:
+        typeof message.payload_json.response_type === "string"
+          ? (message.payload_json.response_type as ChatResponse["response_type"])
+          : undefined,
+      confidenceScore:
+        typeof message.payload_json.confidence_score === "number"
+          ? message.payload_json.confidence_score
+          : undefined,
+      payload:
+        message.payload_json.payload && typeof message.payload_json.payload === "object"
+          ? (message.payload_json.payload as TypedResponsePayload)
+          : undefined,
+      policyCitations: Array.isArray(message.payload_json.policy_citations)
+        ? (message.payload_json.policy_citations as PolicyCitation[])
+        : undefined,
+      quickActions: Array.isArray(message.payload_json.quick_actions)
+        ? (message.payload_json.quick_actions as QuickAction[])
+        : undefined,
       timestamp: message.created_at,
       uiActions: mapped,
       citations: rawCitations.map((item) => ({

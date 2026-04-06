@@ -11,6 +11,7 @@ type MessageListProps = {
   onNavigate: (messageId: string, index: number) => void;
   onOpenAccessRequest: (suggestedResource?: string) => void;
   onViewAccessRequests: () => void;
+  onQuickAction?: (prompt: string) => void;
 };
 
 export function MessageList({
@@ -21,6 +22,7 @@ export function MessageList({
   onNavigate,
   onOpenAccessRequest,
   onViewAccessRequests,
+  onQuickAction,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -48,6 +50,7 @@ export function MessageList({
               onNavigate={(messageIndex) => onNavigate(message.id, messageIndex)}
               onOpenAccessRequest={onOpenAccessRequest}
               onViewAccessRequests={onViewAccessRequests}
+              onQuickAction={onQuickAction}
               requestContext={requestContext}
             />
           </div>

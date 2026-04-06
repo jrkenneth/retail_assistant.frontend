@@ -2,12 +2,27 @@ import type { ChatMessage, ChatResponse, MessageAlternative } from "./types";
 
 type AssistantMessageFields = Pick<
   ChatMessage,
-  "text" | "uiActions" | "citations" | "summary" | "follow_up" | "showSources"
+  | "text"
+  | "responseType"
+  | "confidenceScore"
+  | "payload"
+  | "policyCitations"
+  | "quickActions"
+  | "uiActions"
+  | "citations"
+  | "summary"
+  | "follow_up"
+  | "showSources"
 >;
 
 export function createAssistantMessageFields(response: ChatResponse): AssistantMessageFields {
   return {
     text: response.message_text,
+    responseType: response.response_type,
+    confidenceScore: response.confidence_score,
+    payload: response.payload,
+    policyCitations: response.policy_citations,
+    quickActions: response.quick_actions,
     uiActions: response.ui_actions,
     citations: response.citations,
     summary: response.summary,
@@ -21,10 +36,28 @@ export function createMessageAlternative(response: ChatResponse): MessageAlterna
 }
 
 export function createAlternativeFromMessage(
-  message: Pick<ChatMessage, "text" | "uiActions" | "citations" | "summary" | "follow_up" | "showSources">,
+  message: Pick<
+    ChatMessage,
+    | "text"
+    | "responseType"
+    | "confidenceScore"
+    | "payload"
+    | "policyCitations"
+    | "quickActions"
+    | "uiActions"
+    | "citations"
+    | "summary"
+    | "follow_up"
+    | "showSources"
+  >,
 ): MessageAlternative {
   return {
     text: message.text,
+    responseType: message.responseType,
+    confidenceScore: message.confidenceScore,
+    payload: message.payload,
+    policyCitations: message.policyCitations,
+    quickActions: message.quickActions,
     uiActions: message.uiActions,
     citations: message.citations,
     summary: message.summary,

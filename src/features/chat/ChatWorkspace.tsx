@@ -5,7 +5,6 @@ import { createAccessRequestApi } from "../access-requests/accessRequestsApi";
 import type { AuthenticatedUser } from "../auth/authApi";
 import { MessageList } from "./MessageList";
 import { PromptComposer } from "./PromptComposer";
-import { SessionList } from "./SessionList";
 import {
   createSessionApi,
   fetchSessionMessagesApi,
@@ -72,29 +71,9 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
   const [backendStatus, setBackendStatus] = useState<HealthStatus>("loading");
   const [researchMode, setResearchMode] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [isAccessRequestModalOpen, setIsAccessRequestModalOpen] = useState(false);
   const [suggestedAccessResource, setSuggestedAccessResource] = useState("");
   const [accessRequestNotice, setAccessRequestNotice] = useState("");
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 900px)");
-
-    const applyViewportMode = (matches: boolean) => {
-      setIsMobileViewport(matches);
-      setSidebarOpen(!matches);
-    };
-
-    applyViewportMode(mediaQuery.matches);
-
-    const handleChange = (event: MediaQueryListEvent) => {
-      applyViewportMode(event.matches);
-    };
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
 
   // Sync per-session modes from localStorage whenever the active session changes.
   useEffect(() => {
@@ -144,9 +123,25 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
           const savedId = loadActiveSessionId();
           const validId = existing.find((s) => s.id === savedId)?.id ?? existing[0].id;
           setActiveSessionId(validId);
+        } else {
+          const created = await createSessionApi(`session-${mkId()}`, "New Chat");
+          if (!cancelled) {
+            setSessions([created]);
+            setActiveSessionId(created.id);
+          }
         }
       } catch {
-        // Leave sessions empty; the user will see the no-session placeholder.
+        const localSession: ChatSession = {
+          id: `session-${mkId()}`,
+          name: "New Chat",
+          role: "agent",
+          updatedAt: new Date().toISOString(),
+          messages: [],
+        };
+        if (!cancelled) {
+          setSessions([localSession]);
+          setActiveSessionId(localSession.id);
+        }
       }
     };
 
@@ -233,9 +228,6 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
       const created = await createSessionApi(id, `New Chat ${sessions.length + 1}`);
       setSessions((prev) => [created, ...prev]);
       setActiveSessionId(created.id);
-      if (isMobileViewport) {
-        setSidebarOpen(false);
-      }
     } catch {
       const localSession: ChatSession = {
         id,
@@ -246,17 +238,11 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
       };
       setSessions((prev) => [localSession, ...prev]);
       setActiveSessionId(localSession.id);
-      if (isMobileViewport) {
-        setSidebarOpen(false);
-      }
     }
   };
 
   const selectSession = (sessionId: string) => {
     setActiveSessionId(sessionId);
-    if (isMobileViewport) {
-      setSidebarOpen(false);
-    }
   };
 
   const navigateAlternative = (messageId: string, index: number) => {
@@ -460,100 +446,84 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
       setStatusMessage("");
     }
   };
+
+  const starterMessages: ChatMessage[] = activeMessages.length > 0
+    ? activeMessages
+    : [
+        {
+          id: "starter-greeting",
+          role: "assistant",
+          text: "Hello! I'm Lena, your Retail Assistant. How can I help you today?",
+          responseType: "text",
+          quickActions: [
+            { label: "Track my order", prompt: "Track my order" },
+            { label: "Return an item", prompt: "Return an item" },
+            { label: "Check product availability", prompt: "Check product availability" },
+            { label: "View promotions", prompt: "View promotions" },
+          ],
+          timestamp: new Date().toISOString(),
+        },
+      ];
+
   return (
-    <main className="chat-app">
-      <header className="app-header">
-        <div className="app-header-left">
-          <button
-            type="button"
-            className="sidebar-toggle-btn"
-            onClick={() => setSidebarOpen((o) => !o)}
-            aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-            title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-          >
-            ☰
-          </button>
-          <div className="app-header-copy">
-            <h1>Chat Workspace</h1>
-            <p>
-              {user.full_name} · {user.customer_number} · {user.account_status}
-            </p>
+    <main className="chat-app retail-chat-app">
+      <header className="retail-topbar">
+        <div className="retail-topbar-brand">
+          <div className="retail-logo-box">V</div>
+          <div>
+            <strong>Velora</strong>
+            <p><span className="online-dot" /> Lena is online</p>
           </div>
         </div>
-        <div className="app-header-actions">
-          <div className="status-pill" data-status={backendStatus}>
-            API: {backendStatus}
-          </div>
-          {/*
-          <a className="secondary-link app-header-link" href="/access-requests">
-            Access requests
-          </a>
-          */}
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => { void onLogout(); }}
-          >
-            Log out
+        <nav className="retail-topbar-nav">
+          <a href="#orders">Orders</a>
+          <a href="#returns">Returns</a>
+          <a href="#support">Support</a>
+        </nav>
+        <div className="retail-topbar-user">
+          <div className={`status-pill status-pill--${backendStatus}`}>{backendStatus}</div>
+          <button type="button" className="avatar-chip" onClick={() => { void onLogout(); }} aria-label="Account">
+            {user.full_name.slice(0, 1).toUpperCase()}
           </button>
         </div>
       </header>
 
-      {isMobileViewport ? (
-        <button
-          type="button"
-          className={`mobile-sidebar-backdrop${sidebarOpen ? " mobile-sidebar-backdrop--open" : ""}`}
-          aria-label="Close sidebar"
-          onClick={() => setSidebarOpen(false)}
-        />
-      ) : null}
-
-      <section
-        className={[
-          "chat-layout",
-          sidebarOpen ? "" : "chat-layout--sidebar-closed",
-          isMobileViewport ? "chat-layout--mobile" : "",
-          isMobileViewport && sidebarOpen ? "chat-layout--mobile-sidebar-open" : "",
-        ].filter(Boolean).join(" ")}
-      >
-        <SessionList
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          onCreateSession={() => { void createSession(); }}
-          onSelectSession={selectSession}
-          onDeleteSession={(id) => { void deleteSession(id); }}
-          onRenameSession={(id, name) => { void renameSession(id, name); }}
-        />
-
-        <div className="chat-main">
+      <section className="retail-chat-shell">
+        <div className="retail-chat-main">
           {accessRequestNotice ? (
             <div className="chat-notice toast toast-success">{accessRequestNotice}</div>
           ) : null}
+          <div className="retail-session-frame">
+            <div className="retail-session-heading">
+              <div>
+                <span className="eyebrow">Customer Support</span>
+                <h1>Velora Assistant</h1>
+              </div>
+              <p>Track orders, returns, products, promotions, and support cases with Lena.</p>
+            </div>
           {activeSession ? (
             <>
               <MessageList
-                messages={activeMessages}
+                messages={starterMessages}
                 isTyping={isTyping}
                 statusMessage={statusMessage}
                 onTryAgain={(id) => { void tryAgain(id); }}
                 onNavigate={navigateAlternative}
                 onOpenAccessRequest={openAccessRequestModal}
                 onViewAccessRequests={viewAccessRequests}
+                onQuickAction={(prompt) => { void sendPrompt(prompt); }}
               />
               <PromptComposer
                 onSend={sendPrompt}
                 disabled={isTyping}
-                researchMode={researchMode}
-                thinkingMode={thinkingMode}
-                onToggleResearch={toggleResearch}
-                onToggleThinking={toggleThinking}
               />
             </>
           ) : (
-            <div className="no-session-placeholder">
-              <p>No chat session selected. Create a new session to get started.</p>
+            <div className="no-session-placeholder retail-empty-state">
+              <p>Preparing Lena...</p>
             </div>
           )}
+          </div>
         </div>
       </section>
       <AccessRequestModal

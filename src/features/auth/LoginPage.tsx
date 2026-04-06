@@ -26,9 +26,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <main className="login-page">
-      <section className="login-card">
+      <section className="login-card retail-login-card">
         <div className="login-copy">
-          <h1>Sign in to Velora</h1>
+          <span className="login-brand-mark">Velora</span>
+          <h1>Sign in to continue</h1>
           <p>Use your Velora customer credentials to continue with Lena.</p>
         </div>
 
@@ -61,7 +62,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
           {error ? <p className="login-error">{error}</p> : null}
 
-          <button className="secondary-btn login-submit" type="submit" disabled={isSubmitting}>
+          <button className="primary-btn retail-primary-btn login-submit" type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
         </form>

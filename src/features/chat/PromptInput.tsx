@@ -35,7 +35,7 @@ export function PromptInput({ value, disabled, onChange, onSubmit }: PromptInput
       value={value}
       onChange={(event) => onChange(event.target.value)}
       onKeyDown={handleKeyDown}
-      placeholder="Ask me anything..."
+      placeholder="Ask about products, orders, returns, or promotions..."
       rows={1}
       disabled={disabled}
     />
