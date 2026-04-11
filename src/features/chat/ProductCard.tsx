@@ -8,8 +8,8 @@ export function ProductCard({ product }: ProductCardProps) {
   const specs = Object.entries(product.specifications ?? {});
   const reviewLabel = typeof product.review_count === "number"
     ? `${product.review_count.toLocaleString()} reviews`
-    : "2.4k reviews";
-  const ratingLabel = typeof product.rating === "number" ? product.rating.toFixed(1) : "4.8";
+    : null;
+  const ratingLabel = typeof product.rating === "number" ? product.rating.toFixed(1) : null;
 
   return (
     <article className="retail-card product-card">
@@ -22,24 +22,35 @@ export function ProductCard({ product }: ProductCardProps) {
             <span className="status-chip status-chip--promo">Promotion Eligible</span>
           ) : null}
         </div>
-        <div className="product-image-placeholder" aria-hidden="true">
-          <div className="product-image-shape">
-            <div className="product-image-highlight" />
+        {product.image_url ? (
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="product-image"
+            loading="lazy"
+          />
+        ) : (
+          <div className="product-image-placeholder" aria-hidden="true">
+            <div className="product-image-shape">
+              <div className="product-image-highlight" />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="product-card-body">
         <p className="eyebrow">Product Spotlight</p>
         <h3>{product.name}</h3>
         <p className="product-sku">SKU {product.sku}</p>
-        <div className="product-rating-line">
-          <span className="product-stars">★★★★★</span>
-          <span>
-            {ratingLabel} / 5
-            {` · ${reviewLabel}`}
-          </span>
-        </div>
+        {ratingLabel !== null && (
+          <div className="product-rating-line">
+            <span className="product-stars">★★★★★</span>
+            <span>
+              {ratingLabel} / 5
+              {reviewLabel !== null ? ` · ${reviewLabel}` : null}
+            </span>
+          </div>
+        )}
 
         <div className="product-price-line">
           <strong>${product.price.toFixed(2)}</strong>

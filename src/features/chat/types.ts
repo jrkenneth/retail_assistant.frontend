@@ -60,6 +60,7 @@ export type ProductCardPayload = {
   warranty_duration: string;
   return_window_days: number;
   specifications: Record<string, string>;
+  image_url?: string;
   rating?: number;
   review_count?: number;
 };
@@ -170,5 +171,6 @@ export type ChatSession = {
   name: string;
   role: UserRole;
   updatedAt: string;
+  closedAt?: string | null;
   messages: ChatMessage[];
 };

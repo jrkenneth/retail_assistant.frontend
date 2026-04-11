@@ -122,6 +122,10 @@ export function MessageBubble({
   const showAccessDeniedCard = !isRetrying && shouldRenderAccessDeniedCard(activeText);
   const processedText  = showSources ? prepareCitationText(activeText) : activeText;
   const mdComponents   = buildComponents(activeCitations);
+  const isEscalationView = !isRetrying && activeResponseType === "escalation" && Boolean(activePayload);
+  const hasBubbleBody =
+    Boolean(activeText.trim()) &&
+    !isEscalationView;
 
   // Carousel: only citations actually referenced in the text, capped at 4.
   // Image-bearing cards are sorted first for a richer visual row.
@@ -142,27 +146,37 @@ export function MessageBubble({
   const isInitialPlaceholder = !isRetrying && activeText === "" && !message.alternatives;
 
   return (
-    <div className="message-row-shell message-row-shell--assistant">
-      <div className="message-avatar message-avatar--assistant" aria-hidden="true">
-        L
-      </div>
+    <div className={`message-row-shell message-row-shell--assistant${isEscalationView ? " message-row-shell--escalation" : ""}`}>
+      {isEscalationView ? null : (
+        <div className="message-avatar message-avatar--assistant" aria-hidden="true">
+          L
+        </div>
+      )}
       <article className="message assistant">
         <header className="message-meta">
           <span>Lena</span>
           <time>{new Date(message.timestamp).toLocaleTimeString()}</time>
         </header>
 
-        {isInitialPlaceholder ? null : (
+        {isInitialPlaceholder ? (
+          <div className="assistant-loading-card" aria-hidden="true">
+            <div className="skeleton assistant-loading-line assistant-loading-line--lg" />
+            <div className="skeleton assistant-loading-line" />
+            <div className="skeleton assistant-loading-line assistant-loading-line--short" />
+          </div>
+        ) : (
           <>
             {carouselCitations.length > 0 && (
               <SourceCarousel citations={carouselCitations} />
             )}
 
-            <div className="message-md">
-              <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-                {processedText}
-              </Markdown>
-            </div>
+            {hasBubbleBody ? (
+              <div className="message-md">
+                <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                  {processedText}
+                </Markdown>
+              </div>
+            ) : null}
 
             {activeSummary && (
               <div className="message-summary">
@@ -238,20 +252,22 @@ export function MessageBubble({
               </div>
             ) : null}
 
-            <MessageActionBar
-              messageText={activeText}
-              citations={activeCitations}
-              showSources={showSources}
-              alternativeCount={activeAltCount}
-              currentIndex={altIndex}
-              retryCount={retryCount}
-              isRetrying={isRetrying}
-              onTryAgain={onTryAgain}
-              onNavigate={onNavigate}
-              onToggleSources={() => setSourcesPanelOpen((v) => !v)}
-            />
+            {isEscalationView ? null : (
+              <MessageActionBar
+                messageText={activeText}
+                citations={activeCitations}
+                showSources={showSources}
+                alternativeCount={activeAltCount}
+                currentIndex={altIndex}
+                retryCount={retryCount}
+                isRetrying={isRetrying}
+                onTryAgain={onTryAgain}
+                onNavigate={onNavigate}
+                onToggleSources={() => setSourcesPanelOpen((v) => !v)}
+              />
+            )}
 
-            {showSources && activeCitations.length > 0 && (
+            {showSources && activeCitations.length > 0 && !isEscalationView && (
               <SourcesPanel
                 citations={activeCitations}
                 isOpen={sourcesPanelOpen}

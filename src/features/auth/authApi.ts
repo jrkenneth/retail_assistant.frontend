@@ -4,8 +4,10 @@ import { getStorageItem, removeStorageItem, setStorageItem } from "../../utils/s
 const AUTH_TOKEN_KEY = "auth_token";
 
 export type AuthenticatedUser = {
+  customer_id: string;
   customer_number: string;
-  employee_number: string;
+  first_name: string;
+  last_name: string;
   full_name: string;
   email: string;
   account_status: string;

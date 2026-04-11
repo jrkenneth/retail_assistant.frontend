@@ -87,6 +87,7 @@ type BackendChatResponse = {
 type BackendSession = {
   id: string;
   title: string;
+  closed_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -175,6 +176,7 @@ function mapSession(session: BackendSession): ChatSession {
     name: session.title,
     role: "agent",
     updatedAt: session.updated_at,
+    closedAt: session.closed_at,
     messages: [],
   };
 }
@@ -290,6 +292,19 @@ export async function renameSessionApi(sessionId: string, title: string): Promis
   if (!response.ok) {
     throw new Error("Failed to rename session");
   }
+}
+
+export async function setSessionClosedApi(sessionId: string, isClosed: boolean): Promise<ChatSession> {
+  const response = await authorizedFetch(`${apiBase}/sessions/${sessionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_closed: isClosed }),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to update session state");
+  }
+  const payload = (await response.json()) as BackendSession;
+  return mapSession(payload);
 }
 
 export async function sendChatPromptApi(

@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { ArtifactViewerPage } from "./features/artifacts/ArtifactViewerPage";
 import { AccessRequestsPage } from "./features/access-requests/AccessRequestsPage";
+import { CatalogPage } from "./features/catalog/CatalogPage";
+import { ProductDetailPage } from "./features/catalog/ProductDetailPage";
+import { MyOrdersPage } from "./features/orders/MyOrdersPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import {
   clearAuthToken,
@@ -95,6 +98,12 @@ function App() {
     content = <ArtifactViewerPage user={user} onLogout={handleLogout} />;
   } else if (path.startsWith("/access-requests")) {
     content = <AccessRequestsPage user={user} onLogout={handleLogout} />;
+  } else if (path.startsWith("/catalog/")) {
+    content = <ProductDetailPage user={user} onLogout={handleLogout} />;
+  } else if (path === "/catalog") {
+    content = <CatalogPage user={user} onLogout={handleLogout} />;
+  } else if (path.startsWith("/my-orders")) {
+    content = <MyOrdersPage user={user} onLogout={handleLogout} />;
   }
 
   return <div className="authenticated-shell">{content}</div>;
