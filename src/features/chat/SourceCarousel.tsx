@@ -6,6 +6,10 @@ type SourceCarouselProps = {
   citations: Citation[];
 };
 
+function isLinkableCitation(citation: Citation): citation is Citation & { uri: string } {
+  return typeof citation.uri === "string" && /^https?:\/\//i.test(citation.uri);
+}
+
 /** Placeholder visual for cards without an image — shows the domain's first letter */
 function DomainPlaceholder({ citation }: { citation: Citation }) {
   const domain = getDomainLabel(citation.uri, citation.label);
@@ -32,11 +36,12 @@ function ImageWithFallback({ citation }: { citation: Citation }) {
 }
 
 export function SourceCarousel({ citations }: SourceCarouselProps) {
-  if (citations.length === 0) return null;
+  const linkableCitations = citations.filter(isLinkableCitation);
+  if (linkableCitations.length === 0) return null;
 
   return (
     <div className="source-carousel">
-      {citations.map((c, i) => (
+      {linkableCitations.map((c, i) => (
         <a
           key={i}
           className="source-card"

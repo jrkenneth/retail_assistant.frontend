@@ -55,13 +55,6 @@ export function OrderCard({ order }: OrderCardProps) {
             </div>
           ))}
         </div>
-
-        <div className="order-card-actions">
-          <button type="button" className="primary-btn retail-primary-btn" disabled={!order.can_initiate_return}>
-            Initiate Return
-          </button>
-          <button type="button" className="ghost-btn retail-ghost-btn">Contact Support</button>
-        </div>
       </div>
     </article>
   );

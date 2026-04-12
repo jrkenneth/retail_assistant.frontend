@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
 import type { ChatMessage } from "./types";
@@ -25,10 +25,20 @@ export function MessageList({
   onQuickAction,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const requestContexts = useMemo(() => {
+    let latestUserText: string | undefined;
+    return messages.map((message) => {
+      const contextForCurrent = latestUserText;
+      if (message.role === "user") {
+        latestUserText = message.text;
+      }
+      return contextForCurrent;
+    });
+  }, [messages]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "instant" });
-  }, [messages, isTyping]);
+    bottomRef.current?.scrollIntoView({ behavior: "auto" });
+  }, [messages.length, isTyping]);
 
   return (
     <section className="messages-panel">
@@ -37,10 +47,7 @@ export function MessageList({
       ) : null}
 
       {messages.map((message, index) => {
-        const requestContext = [...messages]
-          .slice(0, index)
-          .reverse()
-          .find((candidate) => candidate.role === "user")?.text;
+        const requestContext = requestContexts[index];
 
         return (
           <div key={message.id} className="message-row">

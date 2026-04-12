@@ -86,6 +86,7 @@ export type EscalationPayload = {
 };
 
 export type RefusalPayload = {
+  reason_code?: "low_confidence" | "policy_restriction" | "live_check_unavailable" | "missing_identifier";
   reason: string;
   policy_title: string;
   policy_bullets: string[];

@@ -310,7 +310,7 @@ export async function setSessionClosedApi(sessionId: string, isClosed: boolean):
 export async function sendChatPromptApi(
   sessionId: string,
   prompt: string,
-  modes: { research: boolean; thinking: boolean } = { research: false, thinking: true },
+  modes: { research: boolean; thinking: boolean } = { research: false, thinking: false },
 ): Promise<ChatResponse> {
   const response = await authorizedFetch(`${apiBase}/chat`, {
     method: "POST",

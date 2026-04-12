@@ -13,7 +13,7 @@ import { ProductCard } from "./ProductCard";
 import { RefusalCard } from "./RefusalCard";
 import { SourceCarousel } from "./SourceCarousel";
 import { SourcesPanel } from "./SourcesPanel";
-import type { ChatMessage, Citation, MessageAlternative } from "./types";
+import type { ChatMessage, Citation, MessageAlternative, ProductCardPayload, QuickAction } from "./types";
 
 type MessageBubbleProps = {
   message: ChatMessage;
@@ -24,6 +24,8 @@ type MessageBubbleProps = {
   onQuickAction?: (prompt: string) => void;
   requestContext?: string;
 };
+
+type WebCitation = Citation & { uri: string };
 
 function shouldRenderAccessDeniedCard(text: string): boolean {
   const normalized = text.toLowerCase();
@@ -53,8 +55,19 @@ function citedIndices(text: string): number[] {
   return order;
 }
 
+function isWebCitation(citation: Citation | undefined): citation is WebCitation {
+  if (!citation || typeof citation.uri !== "string") {
+    return false;
+  }
+  if (!/^https?:\/\//i.test(citation.uri)) {
+    return false;
+  }
+  const label = (citation.label ?? "").trim().toLowerCase();
+  return label !== "policy";
+}
+
 /** Build react-markdown components map that intercepts `[N]` code spans as CitationBadges */
-function buildComponents(citations: Citation[]): Components {
+function buildComponents(getCitationByIndex: (index: number) => WebCitation | undefined): Components {
   return {
     code: ({ children, className }) => {
       // Only handle inline code (no className means no fenced block)
@@ -62,13 +75,62 @@ function buildComponents(citations: Citation[]): Components {
         const match = String(children).match(/^\[(\d+)\]$/);
         if (match) {
           const idx = parseInt(match[1], 10);
-          const cite = citations[idx];
+          const cite = getCitationByIndex(idx);
           return cite ? <CitationBadge citations={[cite]} /> : null;
         }
       }
       return <code className={className}>{children}</code>;
     },
   };
+}
+
+function sanitizeQuickActionPrompt(
+  action: QuickAction,
+  responseType: ChatMessage["responseType"],
+  payload: unknown,
+): string {
+  if (responseType !== "product_card" || !payload || typeof payload !== "object") {
+    return action.prompt;
+  }
+
+  const product = payload as Partial<ProductCardPayload>;
+  const name = typeof product.name === "string" && product.name.trim() ? product.name.trim() : "this product";
+  const sku = typeof product.sku === "string" && product.sku.trim() ? product.sku.trim() : "the listed SKU";
+  const label = action.label.toLowerCase();
+  const prompt = action.prompt.trim();
+  const promptLooksWeak =
+    prompt.length < 12 ||
+    /check the product page|technical details\?/i.test(prompt);
+
+  if (promptLooksWeak && label.includes("detailed") && label.includes("spec")) {
+    return `Share the full technical specifications for ${name} (SKU ${sku}), including battery life, connectivity, dimensions, and compatibility.`;
+  }
+
+  if (promptLooksWeak && label.includes("compare")) {
+    return `Compare ${name} (SKU ${sku}) with similar products and highlight key feature and price differences.`;
+  }
+
+  if (promptLooksWeak && label.includes("delivery")) {
+    return `What are the delivery options and estimated shipping time for ${name} (SKU ${sku})?`;
+  }
+
+  return action.prompt;
+}
+
+function shouldRenderSummary(summary: string | undefined, responseType: ChatMessage["responseType"], messageText: string): boolean {
+  if (!summary || !summary.trim()) {
+    return false;
+  }
+
+  if (responseType !== "text") {
+    return false;
+  }
+
+  const normalizedMessage = messageText.trim();
+  const wordCount = normalizedMessage ? normalizedMessage.split(/\s+/).length : 0;
+  const charCount = normalizedMessage.length;
+
+  return wordCount >= 90 || charCount >= 600;
 }
 
 export function MessageBubble({
@@ -116,26 +178,41 @@ export function MessageBubble({
   const activeFollowUp    = isRetrying ? undefined : (alt?.follow_up ?? message.follow_up);
   const activeAltCount    = message.alternatives?.length ?? 1;
   const retryCount        = activeAltCount - 1;
+  const isEscalationView = !isRetrying && activeResponseType === "escalation" && Boolean(activePayload);
   // show_sources: undefined/true → show; false → suppress carousel, badges and Sources button
   const showSources       = isRetrying ? false : ((alt?.showSources ?? message.showSources) !== false);
+  const webCitations      = activeCitations.filter(isWebCitation);
+  const showWebSources    = showSources && webCitations.length > 0 && !isEscalationView;
 
   const showAccessDeniedCard = !isRetrying && shouldRenderAccessDeniedCard(activeText);
-  const processedText  = showSources ? prepareCitationText(activeText) : activeText;
-  const mdComponents   = buildComponents(activeCitations);
-  const isEscalationView = !isRetrying && activeResponseType === "escalation" && Boolean(activePayload);
+  const processedText  = showWebSources ? prepareCitationText(activeText) : activeText;
+  const mdComponents   = buildComponents((index) => {
+    const citation = activeCitations[index];
+    return isWebCitation(citation) ? citation : undefined;
+  });
+  const normalizedQuickActions = activeQuickActions.map((action) => ({
+    ...action,
+    prompt: sanitizeQuickActionPrompt(action, activeResponseType, activePayload),
+  }));
+  const suppressBubbleBodyForRefusalCard =
+    !isRetrying && activeResponseType === "refusal" && Boolean(activePayload);
   const hasBubbleBody =
     Boolean(activeText.trim()) &&
-    !isEscalationView;
+    !isEscalationView &&
+    !suppressBubbleBodyForRefusalCard;
+  const showSummary = shouldRenderSummary(activeSummary, activeResponseType, activeText);
 
   // Carousel: only citations actually referenced in the text, capped at 4.
   // Image-bearing cards are sorted first for a richer visual row.
   const CAROUSEL_MAX = 4;
   const carouselCitations = (() => {
-    if (!showSources || activeCitations.length === 0) return [];
+    if (!showWebSources) return [];
     const indices = citedIndices(activeText);
-    const cited = indices.map((i) => activeCitations[i]).filter(Boolean);
+    const cited = indices
+      .map((i) => activeCitations[i])
+      .filter(isWebCitation);
     // If the model embedded no markers, fall back to the first N citations
-    const pool = cited.length > 0 ? cited : activeCitations.slice(0, CAROUSEL_MAX);
+    const pool = cited.length > 0 ? cited : webCitations.slice(0, CAROUSEL_MAX);
     return [
       ...pool.filter((c) => !!c.image),
       ...pool.filter((c) => !c.image),
@@ -178,20 +255,13 @@ export function MessageBubble({
               </div>
             ) : null}
 
-            {activeSummary && (
+            {showSummary && (
               <div className="message-summary">
                 <strong className="summary-heading">In short:</strong>
                 <div className="summary-body">
                   <Markdown remarkPlugins={[remarkGfm]}>{activeSummary}</Markdown>
                 </div>
               </div>
-            )}
-
-            {activeFollowUp && (
-              <>
-                <hr className="message-divider" />
-                <p className="message-followup">{activeFollowUp}</p>
-              </>
             )}
 
             {activeUiActions.length > 0 && (
@@ -215,7 +285,7 @@ export function MessageBubble({
             ) : null}
 
             {!isRetrying && activeResponseType === "escalation" && activePayload ? (
-              <EscalationPanel payload={activePayload as any} />
+              <EscalationPanel payload={activePayload as any} onCancelEscalation={onQuickAction} />
             ) : null}
 
             {!isRetrying && activeResponseType === "refusal" && activePayload ? (
@@ -237,9 +307,9 @@ export function MessageBubble({
               </div>
             ) : null}
 
-            {activeQuickActions.length > 0 ? (
+            {normalizedQuickActions.length > 0 ? (
               <div className="quick-action-row">
-                {activeQuickActions.map((action) => (
+                {normalizedQuickActions.map((action) => (
                   <button
                     key={`${action.label}-${action.prompt}`}
                     type="button"
@@ -252,11 +322,18 @@ export function MessageBubble({
               </div>
             ) : null}
 
+            {activeFollowUp && (
+              <>
+                <hr className="message-divider" />
+                <p className="message-followup">{activeFollowUp}</p>
+              </>
+            )}
+
             {isEscalationView ? null : (
               <MessageActionBar
                 messageText={activeText}
-                citations={activeCitations}
-                showSources={showSources}
+                citations={webCitations}
+                showSources={showWebSources}
                 alternativeCount={activeAltCount}
                 currentIndex={altIndex}
                 retryCount={retryCount}
@@ -267,9 +344,9 @@ export function MessageBubble({
               />
             )}
 
-            {showSources && activeCitations.length > 0 && !isEscalationView && (
+            {showWebSources && !isEscalationView && (
               <SourcesPanel
-                citations={activeCitations}
+                citations={webCitations}
                 isOpen={sourcesPanelOpen}
                 onClose={() => setSourcesPanelOpen(false)}
               />

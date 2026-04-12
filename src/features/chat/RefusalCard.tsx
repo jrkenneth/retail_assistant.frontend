@@ -5,22 +5,34 @@ type RefusalCardProps = {
 };
 
 export function RefusalCard({ payload }: RefusalCardProps) {
+  const isLowConfidence = payload?.reason_code === "low_confidence";
+  const policyTitle = payload?.policy_title?.trim() || "Policy Restriction";
+  const reason = payload?.reason?.trim() || (isLowConfidence
+    ? "Lena needs a quick verification before giving a definitive answer."
+    : "I couldn't approve that request based on current policy constraints.");
+  const policyBullets = Array.isArray(payload?.policy_bullets)
+    ? payload.policy_bullets.filter((bullet): bullet is string => typeof bullet === "string" && bullet.trim().length > 0)
+    : [];
+  const eyebrow = isLowConfidence ? "Verification Required" : "Policy Decision";
+  const statusLine = isLowConfidence ? "Status: Needs review" : "Status: Request Declined";
+  const boxTitle = isLowConfidence ? "Why this needs a check" : "Decision Basis";
+
   return (
     <article className="retail-card refusal-card">
       <div className="refusal-head">
-        <div className="refusal-icon">i</div>
+        {!isLowConfidence ? <div className="refusal-icon">i</div> : null}
         <div>
-          <p className="eyebrow">Policy Update</p>
-          <h3>{payload.policy_title}</h3>
-          <p className="refusal-status-line">Status: Request Declined</p>
+          <p className="eyebrow">{eyebrow}</p>
+          <h3>{policyTitle}</h3>
+          <p className="refusal-status-line">{statusLine}</p>
         </div>
       </div>
 
-      <p className="refusal-explainer">{payload.reason}</p>
+      <p className="refusal-explainer">{reason}</p>
 
       <div className="policy-bullet-box">
-        <strong className="policy-box-title">Return Window Policy</strong>
-        {payload.policy_bullets.map((bullet) => (
+        <strong className="policy-box-title">{boxTitle}</strong>
+        {(policyBullets.length > 0 ? policyBullets : ["Please review the relevant policy details or ask Lena for clarification."]).map((bullet) => (
           <div key={bullet} className="policy-bullet-row">
             <span>•</span>
             <p>{bullet}</p>
@@ -38,26 +50,6 @@ export function RefusalCard({ payload }: RefusalCardProps) {
           </div>
         </div>
       ) : null}
-
-      <a className="catalog-link" href="#policy">View Full Refund Policy</a>
-
-      <div className="refusal-assistance">
-        <h4>Need further assistance?</h4>
-        <p>
-          If you believe there has been an error or your situation needs a closer review, Lena can connect you to support.
-        </p>
-      </div>
-
-      <div className="refusal-footer-actions">
-        <button type="button" className="primary-btn retail-primary-btn">Escalate to Support</button>
-        <button type="button" className="ghost-btn retail-ghost-btn">Ask Lena Something Else</button>
-      </div>
-
-      <div className="refusal-links">
-        <span>Shipping Policies</span>
-        <span>Payment Methods</span>
-        <span>Warranty Info</span>
-      </div>
     </article>
   );
 }

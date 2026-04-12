@@ -46,7 +46,7 @@ function clearResearchMode(sessionId: string): void {
 
 function loadThinkingMode(sessionId: string): boolean {
   const value = getStorageItem(THINKING_MODE_KEY(sessionId));
-  return value === null ? true : value === "true";
+  return value === null ? false : value === "true";
 }
 
 function saveThinkingMode(sessionId: string, value: boolean): void {
@@ -76,7 +76,7 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
   const [statusMessage, setStatusMessage] = useState("");
   const [backendStatus, setBackendStatus] = useState<HealthStatus>("loading");
   const [researchMode, setResearchMode] = useState(false);
-  const [thinkingMode, setThinkingMode] = useState(true);
+  const [thinkingMode, setThinkingMode] = useState(false);
   const [isAccessRequestModalOpen, setIsAccessRequestModalOpen] = useState(false);
   const [suggestedAccessResource, setSuggestedAccessResource] = useState("");
   const [accessRequestNotice, setAccessRequestNotice] = useState("");
@@ -87,6 +87,8 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
   const [sessionMenuPosition, setSessionMenuPosition] = useState<SessionMenuPosition | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const sessionMenuRef = useRef<HTMLDivElement | null>(null);
+  const streamBufferRef = useRef<Record<string, { text: string; streamingText: string }>>({});
+  const streamFlushFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (activeSessionId) {
@@ -208,6 +210,67 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
       prev.map((session) => (session.id === activeSessionId ? updater(session) : session)),
     );
   };
+
+  const flushStreamBufferNow = () => {
+    if (streamFlushFrameRef.current !== null) {
+      window.cancelAnimationFrame(streamFlushFrameRef.current);
+      streamFlushFrameRef.current = null;
+    }
+
+    const pending = streamBufferRef.current;
+    streamBufferRef.current = {};
+    const pendingIds = Object.keys(pending);
+    if (pendingIds.length === 0) {
+      return;
+    }
+
+    updateActiveSession((session) => ({
+      ...session,
+      messages: session.messages.map((message) => {
+        const patch = pending[message.id];
+        if (!patch) {
+          return message;
+        }
+        return {
+          ...message,
+          ...(patch.text ? { text: `${message.text}${patch.text}` } : {}),
+          ...(patch.streamingText
+            ? { streamingText: `${message.streamingText ?? ""}${patch.streamingText}` }
+            : {}),
+        };
+      }),
+    }));
+  };
+
+  const scheduleStreamFlush = () => {
+    if (streamFlushFrameRef.current !== null) {
+      return;
+    }
+    streamFlushFrameRef.current = window.requestAnimationFrame(() => {
+      streamFlushFrameRef.current = null;
+      flushStreamBufferNow();
+    });
+  };
+
+  const enqueueStreamDelta = (
+    messageId: string,
+    delta: string,
+    target: "text" | "streamingText",
+  ) => {
+    const existing = streamBufferRef.current[messageId] ?? { text: "", streamingText: "" };
+    existing[target] = `${existing[target]}${delta}`;
+    streamBufferRef.current[messageId] = existing;
+    scheduleStreamFlush();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (streamFlushFrameRef.current !== null) {
+        window.cancelAnimationFrame(streamFlushFrameRef.current);
+        streamFlushFrameRef.current = null;
+      }
+    };
+  }, []);
 
   const deleteSession = async (sessionId: string) => {
     try {
@@ -386,18 +449,13 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
         prompt,
         { research: researchMode, thinking: thinkingMode },
         (delta) => {
-          updateActiveSession((session) => ({
-            ...session,
-            messages: session.messages.map((message) =>
-              message.id === messageId
-                ? { ...message, streamingText: (message.streamingText ?? "") + delta }
-                : message,
-            ),
-          }));
+          enqueueStreamDelta(messageId, delta, "streamingText");
         },
         (_phase, status) => setStatusMessage(status),
         true,
       );
+
+      flushStreamBufferNow();
 
       const newAlternative = createMessageAlternative(response);
 
@@ -460,22 +518,14 @@ export function ChatWorkspace({ user, onLogout }: ChatWorkspaceProps) {
         prompt,
         { research: researchMode, thinking: thinkingMode },
         (delta) => {
-          updateActiveSession((session) => ({
-            ...session,
-            messages: session.messages.map((message) =>
-              message.id === assistantId
-                ? {
-                    ...message,
-                    text: `${message.text}${delta}`,
-                  }
-                : message,
-            ),
-          }));
+          enqueueStreamDelta(assistantId, delta, "text");
         },
         (_phase, message) => {
           setStatusMessage(message);
         },
       );
+
+      flushStreamBufferNow();
 
       const assistantFields = createAssistantMessageFields(response);
       const firstAlt = createMessageAlternative(response);

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ProductCardPayload } from "./types";
 
 type ProductCardProps = {
@@ -5,11 +6,21 @@ type ProductCardProps = {
 };
 
 export function ProductCard({ product }: ProductCardProps) {
-  const specs = Object.entries(product.specifications ?? {});
+  const [imageHidden, setImageHidden] = useState(false);
+  const specs = Object.entries(product.specifications ?? {}).filter(([label, value]) => {
+    const normalizedLabel = String(label).trim();
+    const normalizedValue = String(value ?? "").trim();
+    return normalizedLabel.length > 0 && normalizedValue.length > 0;
+  });
   const reviewLabel = typeof product.review_count === "number"
     ? `${product.review_count.toLocaleString()} reviews`
     : null;
   const ratingLabel = typeof product.rating === "number" ? product.rating.toFixed(1) : null;
+  const imageSrc =
+    typeof product.image_url === "string" && product.image_url.trim().length > 0
+      ? product.image_url
+      : undefined;
+  const productPageHref = `/catalog/${encodeURIComponent(product.sku)}`;
 
   return (
     <article className="retail-card product-card">
@@ -22,20 +33,21 @@ export function ProductCard({ product }: ProductCardProps) {
             <span className="status-chip status-chip--promo">Promotion Eligible</span>
           ) : null}
         </div>
-        {product.image_url ? (
+        {imageSrc && !imageHidden ? (
           <img
-            src={product.image_url}
+            src={imageSrc}
             alt={product.name}
             className="product-image"
             loading="lazy"
+            onError={(event) => {
+              event.currentTarget.style.display = "none";
+              setImageHidden(true);
+            }}
           />
-        ) : (
-          <div className="product-image-placeholder" aria-hidden="true">
-            <div className="product-image-shape">
-              <div className="product-image-highlight" />
-            </div>
-          </div>
-        )}
+        ) : null}
+        {!imageSrc || imageHidden ? (
+          <div className="product-image-placeholder" aria-hidden="true" />
+        ) : null}
       </div>
 
       <div className="product-card-body">
@@ -73,22 +85,29 @@ export function ProductCard({ product }: ProductCardProps) {
         <details className="product-specs" open>
           <summary>Technical Specs</summary>
           <div className="product-spec-grid">
-            {specs.map(([label, value]) => (
+            {specs.length > 0 ? specs.map(([label, value]) => (
               <div key={label}>
                 <span>{label}</span>
                 <strong>{value}</strong>
               </div>
-            ))}
+            )) : (
+              <div>
+                <span>Specs status</span>
+                <strong>No technical specifications are available for this item yet.</strong>
+              </div>
+            )}
           </div>
         </details>
 
         <div className="product-card-actions">
-          <button type="button" className="primary-btn retail-primary-btn">Add to Cart</button>
-          <button type="button" className="ghost-btn retail-ghost-btn">Compare with Similar</button>
-        </div>
-
-        <div className="product-tip-banner">
-          Pro Tip: Ask Lena about compatible accessories, delivery windows, or bundle savings for this item.
+          <a
+            href={productPageHref}
+            target="_blank"
+            rel="noreferrer"
+            className="primary-btn retail-primary-btn product-page-cta"
+          >
+            View Product Page
+          </a>
         </div>
       </div>
     </article>
